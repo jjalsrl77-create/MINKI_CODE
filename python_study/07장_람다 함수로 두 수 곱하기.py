@@ -1,5 +1,3 @@
-def multiply(a, b):
-    result = a * b
-    return result
+multiply = lambda a, b: a * b
 
-multiply()
+print(multiply(3, 4))
