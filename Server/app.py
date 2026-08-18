@@ -1,13 +1,21 @@
 from datetime import datetime
-from html import escape
-from pathlib import Path
-import sqlite3
-from uuid import uuid4
+from html import escape # HTML에서 escape를 가져와 특수 문자가 HTML코드로 해서고디지 않게 한다.
+from pathlib import Path # 폴더, 파일의 경로를 다룬다.
+import sqlite3 # sqlite3의 기능 묶음 전체를 가져온다.
+from uuid import uuid4 # 업로드 파일마다 고유 ID를 만든다.
 
 from flask import Flask, abort, redirect, request, send_from_directory, url_for
-from werkzeug.utils import secure_filename
+# Flask : 웹 서버 앱을 만든다.
+# abort : 404 같은 오류 응답을 즉시 만든다.
+# refirect : 브라우저를 다른 URL로 이동시킨다.
+# request : 브라우저가 보낸 이름, 파일, 주소 정보를 읽는다.
+# send_from_directory : 서버 폴더의 파일을 브라우저로 보낸다.
+# url_for : 함수 이름을 바탕으로 올바른 URL을 만든다.
 
-app = Flask(__name__)
+from werkzeug.utils import secure_filename
+# werkzeug : Flask가 사용하는 웹 관련 도구 모음
+# secure_filename : 업로드한 파일명을 서버에 안전하게 저장할 수 있는 형태로 정리
+app = Flask(__name__) # 웹 서버 앱 생성
 
 # 서버 PC에 원본과 변환 결과를 보관할 폴더입니다.
 BASE_DIR = Path(__file__).resolve().parent
@@ -194,15 +202,18 @@ def index(): # 페이지의 첫 화면을 만드는 함수의 이름
     # maxlength='100': 브라우저에서 최대 100자로 제한
     # placeholder: 비어 있을 때 보여 주는 안내 문구
 
-@app.post("/upload")
-def upload():
+@app.post("/upload") #사용자가 HTML 폼의 업로드를 누르면 POST/upload 요청을 보냄
+def upload(): # 위의 요청을 flask가 upload()함수에 전달
     uploaded_file = request.files.get("file")
     sender_name = (request.form.get("sender_name") or "").strip()
 
     if len(sender_name) > 100:
+        # 400은 HTTP 상태 코드. 400 Bad Request는 서버가 받은 요청의 입력값이 올바르지 않다는 의미
         return "보낸 사람 이름은 100자 이하여야 합니다.", 400
+    # 파일의 입력 자체가 없음 or 파일의 이름이 정해져 있지 않음
     if not uploaded_file or not uploaded_file.filename:
         return "파일을 선택하세요.", 400
+    # is_txt_file()함수에서 파일명이 .txt로 끝나는지 확인
     if not is_txt_file(uploaded_file.filename):
         return "TXT 파일만 업로드할 수 있습니다.", 400
 
@@ -234,23 +245,33 @@ def upload():
             (file_id, uploaded_file.filename, output_name, sender_name, now_text(), len(raw_data)),
         )
 
-    return redirect(url_for("index", saved=output_name))
+    return redirect(url_for("index", saved=output_name)) # 첫 화면으로 이동
 
 
-@app.get("/download/<filename>")
+@app.get("/download/<filename>") # <filename>은 URL에서 값이 바뀔 수 있는 자리
 def download(filename):
     # 데이터베이스에 등록된 파일만 내려받게 하고, 다운로드 사실을 함께 기록합니다.
-    with get_database() as database:
-        file = database.execute(
+    with get_database() as database: # DB에 등록된 파일인지 확인
+        file = database.execute( # DB의 files표에서 요청한 파일명과 같은 output_name을 찾는다.
             "SELECT id, original_name FROM files WHERE output_name = ?", (filename,)
         ).fetchone()
+        # SELECT : 정보 조회
+        # id, original_name : 고유 ID와 원래 파일명만 가져옴
+        # WHERE : 조건 지정
+        # output_name = ? : 결과 파일명이 요청한 filename과 같은 행을 찾음
+        # (filename,) : ? 자리에 넣을 값(한 개짜리 튜플임을 표시하기 위해 쉼표를 붙임)
         if file is None:
-            abort(404)
+            abort(404) # DB에 등록되지 않은 파일명이면 404오류를 반환한다.
 
+        # UODATE 는 이미 있는 데이터를 수정하는 SQL명령 / 해당 파일의 download_count에 1을 더함
         database.execute(
             "UPDATE files SET download_count = download_count + 1 WHERE id = ?",
             (file["id"],),
         )
+        # 다운로드 자체를 download_history 표에 새 기록으로 추가한다
+        # file["id"] : 어떤 파일을 받았는지
+        # now_text() : 다운로드 시각
+        # request.remote_addr : 요청을 보낸 쪽의 IP 주소
         database.execute(
             """
             INSERT INTO download_history (file_id, downloaded_at, downloader_ip)
